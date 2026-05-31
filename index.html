@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Flatpay — Biglietto da Visita</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root {
+  --black:#0a0a0a; --black2:#141414; --gray1:#2a2a2a;
+  --gray2:#444; --gray3:#777; --gray4:#aaa;
+  --border:#e0e0e0; --accent:#4cbe80;
+  --white:#ffffff; --off:#f6f6f6;
+  --radius:14px; --radius-sm:8px;
+}
+html,body { height:100%; font-family:'Plus Jakarta Sans',sans-serif; background:var(--off); color:var(--black); -webkit-font-smoothing:antialiased; }
+.screen { display:none; min-height:100vh; flex-direction:column; }
+.screen.active { display:flex; }
+
+/* SETTINGS */
+#screen-settings { padding:0 0 80px; background:var(--off); }
+.settings-header { background:var(--black); padding:26px 24px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.header-sub { font-size:11px; color:rgba(255,255,255,0.4); letter-spacing:0.03em; margin-top:4px; }
+.btn-show { background:var(--accent); color:var(--black); border:none; border-radius:var(--radius-sm); padding:11px 18px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.18s; flex-shrink:0; }
+.btn-show:hover { background:#5dd492; }
+.settings-body { padding:24px 20px; max-width:520px; margin:0 auto; width:100%; }
+.section-label { font-size:10px; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:var(--gray3); margin-bottom:12px; }
+
+.photo-row { display:flex; align-items:center; gap:16px; margin-bottom:24px; padding:16px; background:white; border:1px solid var(--border); border-radius:var(--radius); }
+.avatar-wrap { position:relative; width:64px; height:64px; flex-shrink:0; }
+.avatar-circle { width:64px; height:64px; border-radius:50%; border:2px solid var(--border); background:var(--off); overflow:hidden; display:flex; align-items:center; justify-content:center; }
+.avatar-circle svg { opacity:0.3; }
+.avatar-circle img { width:100%;height:100%;object-fit:cover;display:none; }
+.avatar-circle.has-photo img { display:block; }
+.avatar-circle.has-photo svg { display:none; }
+.avatar-edit { position:absolute; bottom:-2px; right:-2px; width:22px; height:22px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; cursor:pointer; border:2px solid white; }
+.avatar-edit svg { width:11px; height:11px; }
+#photoInput { display:none; }
+.photo-info strong { font-size:14px; font-weight:600; color:var(--black); }
+.photo-info p { font-size:12px; color:var(--gray3); margin-top:2px; line-height:1.4; }
+
+.field-group { background:white; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:16px; }
+.field-item { display:flex; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); gap:12px; }
+.field-item:last-child { border-bottom:none; }
+.field-icon { width:32px; height:32px; border-radius:8px; background:var(--off); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.field-icon svg { width:15px; height:15px; color:var(--gray2); }
+.field-inner { flex:1; min-width:0; }
+.field-inner label { display:block; font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--gray3); margin-bottom:3px; }
+.field-inner input { width:100%; border:none; outline:none; font-family:inherit; font-size:14px; font-weight:500; color:var(--black); background:transparent; }
+.field-inner input::placeholder { color:#ccc; font-weight:400; }
+
+/* Info box about URL saving */
+.info-box { background:#fff8e6; border:1px solid #ffd97a; border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:20px; font-size:12px; color:#7a5a00; line-height:1.5; }
+.info-box strong { color:#5a3e00; }
+
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--black); color:white; padding:10px 20px; border-radius:999px; font-size:13px; font-weight:500; z-index:100; transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1); white-space:nowrap; }
+.toast.show { transform:translateX(-50%) translateY(0); }
+
+.save-bar { position:fixed; bottom:0; left:0; right:0; background:white; border-top:1px solid var(--border); padding:12px 20px; display:flex; gap:10px; z-index:50; }
+.btn-save { flex:1; background:var(--black); color:white; border:none; border-radius:var(--radius-sm); padding:13px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; transition:background 0.18s; }
+.btn-save:hover { background:var(--black2); }
+.btn-clear { background:var(--off); color:var(--gray3); border:1px solid var(--border); border-radius:var(--radius-sm); padding:13px 16px; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.18s; }
+
+/* PRESENTATION */
+#screen-present { background:var(--black); align-items:center; justify-content:space-between; padding:0; }
+.present-topbar { width:100%; display:flex; align-items:center; justify-content:space-between; padding:22px 24px 0; }
+.btn-back { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.7); border:none; border-radius:var(--radius-sm); padding:8px 14px; font-family:inherit; font-size:12px; font-weight:500; cursor:pointer; transition:background 0.18s; }
+.btn-back:hover { background:rgba(255,255,255,0.14); }
+.present-center { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px 24px; width:100%; max-width:420px; margin:0 auto; }
+.person-chip { display:flex; align-items:center; gap:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:999px; padding:8px 18px 8px 8px; margin-bottom:28px; }
+.chip-avatar { width:44px; height:44px; border-radius:50%; border:2px solid var(--accent); background:#1e1e1e; overflow:hidden; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.chip-avatar img { width:100%;height:100%;object-fit:cover;display:none; }
+.chip-avatar.has-photo img { display:block; }
+.chip-avatar.has-photo svg { display:none; }
+.chip-name { font-size:14px; font-weight:700; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.chip-role { font-size:11px; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px; }
+.qr-card { background:white; border-radius:20px; padding:28px 28px 22px; display:flex; flex-direction:column; align-items:center; width:100%; max-width:320px; box-shadow:0 28px 70px rgba(0,0,0,0.5),0 4px 16px rgba(0,0,0,0.3); position:relative; overflow:hidden; }
+.qr-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--black); }
+.qr-card-label { font-size:10px; font-weight:700; letter-spacing:0.15em; text-transform:uppercase; color:var(--gray3); margin-bottom:16px; z-index:1; align-self:flex-start; }
+.qr-area { width:192px; height:192px; position:relative; margin-bottom:16px; }
+#qr-present { width:192px; height:192px; }
+#qr-present canvas, #qr-present img { width:192px !important; height:192px !important; }
+.qr-corner { position:absolute; width:18px; height:18px; border-color:var(--black); border-style:solid; border-width:0; }
+.qr-corner.tl { top:-3px;left:-3px; border-top-width:3px; border-left-width:3px; border-top-left-radius:4px; }
+.qr-corner.tr { top:-3px;right:-3px; border-top-width:3px; border-right-width:3px; border-top-right-radius:4px; }
+.qr-corner.bl { bottom:-3px;left:-3px; border-bottom-width:3px; border-left-width:3px; border-bottom-left-radius:4px; }
+.qr-corner.br { bottom:-3px;right:-3px; border-bottom-width:3px; border-right-width:3px; border-bottom-right-radius:4px; }
+.qr-instruction { font-size:11.5px; color:var(--gray3); text-align:center; line-height:1.55; margin-bottom:16px; z-index:1; }
+.qr-instruction strong { color:var(--black); }
+.qr-divider { width:100%; height:1px; background:#ebebeb; margin-bottom:14px; z-index:1; }
+.qr-card-footer { display:flex; align-items:center; justify-content:center; gap:10px; z-index:1; }
+.fp-tag { font-size:10px; color:var(--gray4); letter-spacing:0.04em; }
+.present-tagline { margin-top:24px; text-align:center; color:rgba(255,255,255,0.25); font-size:11px; letter-spacing:0.06em; }
+.no-data-msg { text-align:center; color:rgba(255,255,255,0.6); padding:40px 24px; }
+.no-data-msg h3 { font-size:18px; margin-bottom:8px; color:white; }
+.no-data-msg p { font-size:13px; line-height:1.6; }
+
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+.qr-card { animation:fadeIn 0.4s ease both; }
+.person-chip { animation:fadeIn 0.3s ease 0.1s both; opacity:0; animation-fill-mode:both; }
+</style>
+</head>
+<body>
+
+<!-- SCREEN 1 — SETTINGS -->
+<div id="screen-settings" class="screen active">
+  <div class="settings-header">
+    <div>
+      <svg width="130" height="30" viewBox="0 0 130 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="24" font-family="'Plus Jakarta Sans',sans-serif" font-weight="800" font-size="26" letter-spacing="-1" fill="white">flatpay</text>
+        <circle cx="124" cy="7" r="5" fill="#4cbe80"/>
+      </svg>
+      <div class="header-sub">Il tuo biglietto da visita digitale</div>
+    </div>
+    <button class="btn-show" onclick="showPresentation()">Mostra QR ›</button>
+  </div>
+
+  <div class="settings-body">
+
+    <div class="info-box">
+      💡 <strong>Come salvare i tuoi dati:</strong> premi <em>Salva e genera link</em> — il browser aggiornerà l'URL della pagina con i tuoi dati incorporati. <strong>Aggiungi quella pagina ai Preferiti</strong> (o alla schermata home) e i tuoi dati saranno sempre lì, senza bisogno di reinserirli.
+    </div>
+
+    <div class="section-label">Foto profilo</div>
+    <div class="photo-row">
+      <div class="avatar-wrap">
+        <div class="avatar-circle" id="avatarCircle">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          <img id="avatarImg" src="" alt="">
+        </div>
+        <label class="avatar-edit" for="photoInput">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+        </label>
+        <input type="file" id="photoInput" accept="image/*" onchange="loadPhoto(this)">
+      </div>
+      <div class="photo-info">
+        <strong id="avatarName">Foto profilo</strong>
+        <p>Tocca la matita per caricare.<br>Consigliata: quadrata o circolare.</p>
+      </div>
+    </div>
+
+    <div class="section-label">Dati personali</div>
+    <div class="field-group">
+      <div class="field-item">
+        <div class="field-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        </div>
+        <div class="field-inner">
+          <label>Nome e Cognome</label>
+          <input type="text" id="f-nome" placeholder="Es. Alfonso Russo">
+        </div>
+      </div>
+      <div class="field-item">
+        <div class="field-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+        </div>
+        <div class="field-inner">
+          <label>Ruolo</label>
+          <input type="text" id="f-ruolo" placeholder="Es. Business Developer">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Azienda</div>
+    <div class="field-group">
+      <div class="field-item">
+        <div class="field-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </div>
+        <div class="field-inner">
+          <label>Azienda</label>
+          <input type="text" id="f-azienda" value="Flatpay">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Contatti</div>
+    <div class="field-group">
+      <div class="field-item">
+        <div class="field-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8a19.79 19.79 0 01-3.07-8.64A2 2 0 012 .98h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 15.92z"/></svg>
+        </div>
+        <div class="field-inner">
+          <label>Telefono</label>
+          <input type="tel" id="f-tel" placeholder="+39 320 1234567">
+        </div>
+      </div>
+      <div class="field-item">
+        <div class="field-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </div>
+        <div class="field-inner">
+          <label>Email</label>
+          <input type="email" id="f-email" placeholder="nome@flatpay.com">
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="save-bar">
+    <button class="btn-save" onclick="saveToURL()">🔗 Salva e genera link</button>
+    <button class="btn-clear" onclick="clearAll()">Cancella</button>
+  </div>
+</div>
+
+
+<!-- SCREEN 2 — PRESENTATION -->
+<div id="screen-present" class="screen">
+  <div class="present-topbar">
+    <svg width="120" height="28" viewBox="0 0 120 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <text x="0" y="22" font-family="'Plus Jakarta Sans',sans-serif" font-weight="800" font-size="24" letter-spacing="-1" fill="white">flatpay</text>
+      <circle cx="115" cy="6" r="5" fill="#4cbe80"/>
+    </svg>
+    <button class="btn-back" onclick="goBack()">← Modifica</button>
+  </div>
+  <div class="present-center" id="presentContent"></div>
+  <div class="present-tagline">flatpay.com · Pagamenti semplici, tariffe trasparenti</div>
+  <div style="height:24px;"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let photoDataURL = null;
+
+// ── INIT: legge i dati dall'URL hash ──────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadFromURL();
+});
+
+function loadFromURL() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return;
+  try {
+    const data = JSON.parse(decodeURIComponent(hash));
+    if (data.nome)    { document.getElementById('f-nome').value = data.nome; document.getElementById('avatarName').textContent = data.nome; }
+    if (data.ruolo)   document.getElementById('f-ruolo').value = data.ruolo;
+    if (data.azienda) document.getElementById('f-azienda').value = data.azienda;
+    if (data.tel)     document.getElementById('f-tel').value = data.tel;
+    if (data.email)   document.getElementById('f-email').value = data.email;
+    if (data.photo) {
+      photoDataURL = data.photo;
+      document.getElementById('avatarImg').src = data.photo;
+      document.getElementById('avatarCircle').classList.add('has-photo');
+    }
+  } catch(e) {}
+}
+
+// ── SALVA NELL'URL ────────────────────────────────────
+function saveToURL() {
+  const d = getFields();
+  const payload = { ...d };
+  if (photoDataURL) payload.photo = photoDataURL;
+  const encoded = encodeURIComponent(JSON.stringify(payload));
+  // Aggiorna l'URL senza ricaricare la pagina
+  window.location.hash = encoded;
+  if (d.nome) document.getElementById('avatarName').textContent = d.nome;
+  showToast('✓ Link aggiornato — aggiungilo ai Preferiti!');
+}
+
+function clearAll() {
+  if (!confirm('Cancellare tutti i dati?')) return;
+  ['f-nome','f-ruolo','f-tel','f-email'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('f-azienda').value='Flatpay';
+  photoDataURL=null;
+  document.getElementById('avatarCircle').classList.remove('has-photo');
+  document.getElementById('avatarImg').src='';
+  document.getElementById('avatarName').textContent='Foto profilo';
+  window.location.hash='';
+  showToast('Dati rimossi');
+}
+
+// ── FOTO ──────────────────────────────────────────────
+function loadPhoto(input) {
+  const file = input.files[0]; if (!file) return;
+  // Ridimensiona a max 200px per non appesantire l'URL
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = Math.min(img.width, img.height, 200);
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+      photoDataURL = canvas.toDataURL('image/jpeg', 0.7);
+      document.getElementById('avatarImg').src = photoDataURL;
+      document.getElementById('avatarCircle').classList.add('has-photo');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── HELPERS ───────────────────────────────────────────
+function getFields() {
+  return {
+    nome:    document.getElementById('f-nome').value.trim(),
+    ruolo:   document.getElementById('f-ruolo').value.trim(),
+    azienda: document.getElementById('f-azienda').value.trim(),
+    tel:     document.getElementById('f-tel').value.trim(),
+    email:   document.getElementById('f-email').value.trim(),
+  };
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function goBack() {
+  document.getElementById('screen-present').classList.remove('active');
+  document.getElementById('screen-settings').classList.add('active');
+}
+
+// ── PRESENTAZIONE ─────────────────────────────────────
+function showPresentation() {
+  const d = getFields();
+  if (!d.nome && !d.tel && !d.email) {
+    document.getElementById('presentContent').innerHTML=`
+      <div class="no-data-msg"><h3>Nessun dato inserito</h3>
+      <p>Torna alla schermata precedente<br>e compila i tuoi dati.</p></div>`;
+    document.getElementById('screen-settings').classList.remove('active');
+    document.getElementById('screen-present').classList.add('active');
+    return;
+  }
+
+  // Build vCard 3.0
+  const parts = d.nome.split(' ');
+  let vc = 'BEGIN:VCARD\nVERSION:3.0\n';
+  vc += `FN:${d.nome}\nN:${parts.slice(1).join(' ')};${parts[0]};;;\n`;
+  if (d.ruolo)   vc += `TITLE:${d.ruolo}\n`;
+  if (d.azienda) vc += `ORG:${d.azienda}\n`;
+  if (d.tel)     vc += `TEL;TYPE=CELL:${d.tel}\n`;
+  if (d.email)   vc += `EMAIL:${d.email}\n`;
+  vc += 'END:VCARD';
+
+  const hasPhoto = !!photoDataURL;
+  const role = [d.ruolo, d.azienda].filter(Boolean).join(' · ') || 'Flatpay';
+
+  document.getElementById('presentContent').innerHTML = `
+    <div class="person-chip">
+      <div class="chip-avatar ${hasPhoto?'has-photo':''}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+        ${hasPhoto?`<img src="${photoDataURL}" alt="">`:''}
+      </div>
+      <div class="chip-info">
+        <div class="chip-name">${d.nome||'Contatto Flatpay'}</div>
+        <div class="chip-role">${role}</div>
+      </div>
+    </div>
+    <div class="qr-card">
+      <div class="qr-card-label">Inquadra per salvare il contatto</div>
+      <div class="qr-area">
+        <div id="qr-present"></div>
+        <div class="qr-corner tl"></div><div class="qr-corner tr"></div>
+        <div class="qr-corner bl"></div><div class="qr-corner br"></div>
+      </div>
+      <div class="qr-instruction">Apri la <strong>fotocamera</strong> del telefono<br>e punta il QR — nessuna app richiesta</div>
+      <div class="qr-divider"></div>
+      <div class="qr-card-footer">
+        <svg width="90" height="20" viewBox="0 0 90 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <text x="0" y="16" font-family="'Plus Jakarta Sans',sans-serif" font-weight="800" font-size="18" letter-spacing="-0.8" fill="#0a0a0a">flatpay</text>
+          <circle cx="86" cy="4" r="4" fill="#4cbe80"/>
+        </svg>
+        <span class="fp-tag">· Pagamenti semplici</span>
+      </div>
+    </div>`;
+
+  new QRCode(document.getElementById('qr-present'), {
+    text: vc, width:192, height:192,
+    colorDark:'#0a0a0a', colorLight:'#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById('screen-settings').classList.remove('active');
+  document.getElementById('screen-present').classList.add('active');
+  if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{});
+}
+</script>
+</body>
+</html>
