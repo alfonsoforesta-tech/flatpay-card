@@ -11,7 +11,6 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -402,35 +401,178 @@ function deleteCard(id) {
   renderLibrary(); showToast('QR eliminato');
 }
 
-// ── DOWNLOAD: cattura schermata e mostra immagine inline ─
+// ── DOWNLOAD: disegna l'immagine su canvas puro (no html2canvas) ─────────
 function downloadScreenshot(cardId) {
   const card = loadCards().find(c => c.id === cardId);
   if (!card) return;
 
-  currentCard = card;
-  renderPresent(card);
   showToast('⏳ Generazione immagine...');
 
-  // Aspetta che il QR sia renderizzato, poi cattura
+  // Genera QR su canvas temporaneo
+  const tmpDiv = document.createElement('div');
+  tmpDiv.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:300px;';
+  document.body.appendChild(tmpDiv);
+
+  try {
+    new QRCode(tmpDiv, {
+      text: card.vcard, width: 300, height: 300,
+      colorDark: '#0a0a0a', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e) {}
+
   setTimeout(() => {
-    const zone = document.getElementById('capture-zone');
-    html2canvas(zone, {
-      backgroundColor: '#0a0a0a',
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false
-    }).then(canvas => {
-      // Mostra l'immagine in un overlay dentro la stessa pagina
-      // Evita completamente window.open e link.click — funziona ovunque
-      const dataURL = canvas.toDataURL('image/png');
-      showImageOverlay(dataURL, card.nome || 'flatpay');
-    }).catch(() => showToast('Errore nella generazione'));
-  }, 500);
+    // Ottieni il canvas QR generato
+    const qrCanvas = tmpDiv.querySelector('canvas');
+    document.body.removeChild(tmpDiv);
+
+    // Logo Flatpay (già disponibile come base64 nel DOM)
+    const logoImg = document.querySelector('.logo-badge img') ||
+                    document.getElementById('chip-photo');
+    const logoSrc = logoImg ? logoImg.src : null;
+
+    buildCardCanvas(card, qrCanvas, logoSrc).then(finalCanvas => {
+      showImageOverlay(finalCanvas.toDataURL('image/png'));
+    });
+  }, 400);
 }
 
-function showImageOverlay(dataURL, nome) {
-  // Rimuovi overlay precedente se esiste
+function buildCardCanvas(card, qrCanvas, logoSrc) {
+  return new Promise(resolve => {
+    const W = 640, H = 900;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    function draw(logoImg) {
+      // ── Sfondo nero ──
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, W, H);
+
+      // ── CHIP PERSONA (in alto) ──
+      const chipY = 40, chipH = 100, chipX = 40, chipW = W - 80;
+      roundRect(ctx, chipX, chipY, chipW, chipH, 20);
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Avatar cerchio
+      const avatarX = chipX + 18, avatarY = chipY + 18, avatarR = 32;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(avatarX + avatarR, avatarY + avatarR, avatarR, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(avatarX, avatarY, avatarR*2, avatarR*2);
+      if (logoImg) ctx.drawImage(logoImg, avatarX + 8, avatarY + 8, avatarR*2 - 16, avatarR*2 - 16);
+      ctx.restore();
+
+      // Bordo verde avatar
+      ctx.beginPath();
+      ctx.arc(avatarX + avatarR, avatarY + avatarR, avatarR + 2, 0, Math.PI * 2);
+      ctx.strokeStyle = '#4cbe80';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Testo chip
+      const textX = avatarX + avatarR * 2 + 20;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(card.nome || 'Flatpay', textX, chipY + 48);
+      ctx.fillStyle = '#4cbe80';
+      ctx.font = '500 15px sans-serif';
+      ctx.fillText(card.ruolo || '', textX, chipY + 70);
+      ctx.fillStyle = 'rgba(255,255,255,0.38)';
+      ctx.font = '400 13px sans-serif';
+      ctx.fillText(card.azienda || '', textX, chipY + 90);
+
+      // ── QR CARD (bianca) ──
+      const cardX = 40, cardY = 170, cardW = W - 80, cardH = 620;
+      roundRect(ctx, cardX, cardY, cardW, cardH, 22);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // Bordo nero top card
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(cardX, cardY, cardW, 4);
+
+      // Label sopra QR
+      ctx.fillStyle = '#777777';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('INQUADRA PER SALVARE IL CONTATTO', cardX + 28, cardY + 36);
+
+      // QR code centrato
+      const qrSize = 300, qrX = (W - qrSize) / 2, qrY = cardY + 55;
+      if (qrCanvas) {
+        ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
+      }
+
+      // Angolini decorativi QR
+      const corners = [[qrX-4,qrY-4,'tl'],[qrX+qrSize-16+4,qrY-4,'tr'],[qrX-4,qrY+qrSize-16+4,'bl'],[qrX+qrSize-16+4,qrY+qrSize-16+4,'br']];
+      ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 3;
+      corners.forEach(([cx,cy,pos]) => {
+        ctx.beginPath();
+        if (pos==='tl'){ ctx.moveTo(cx,cy+16); ctx.lineTo(cx,cy); ctx.lineTo(cx+16,cy); }
+        if (pos==='tr'){ ctx.moveTo(cx,cy); ctx.lineTo(cx+16,cy); ctx.lineTo(cx+16,cy+16); }
+        if (pos==='bl'){ ctx.moveTo(cx,cy); ctx.lineTo(cx,cy+16); ctx.lineTo(cx+16,cy+16); }
+        if (pos==='br'){ ctx.moveTo(cx,cy); ctx.lineTo(cx+16,cy); ctx.moveTo(cx+16,cy); ctx.lineTo(cx+16,cy+16); }
+        ctx.stroke();
+      });
+
+      // Hint testo
+      ctx.fillStyle = '#777777';
+      ctx.font = '400 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Apri la fotocamera e inquadra il QR', W/2, qrY + qrSize + 30);
+      ctx.fillText('Nessuna app richiesta', W/2, qrY + qrSize + 50);
+
+      // Divisore
+      ctx.fillStyle = '#ebebeb';
+      ctx.fillRect(cardX + 28, qrY + qrSize + 68, cardW - 56, 1);
+
+      // Footer: Flatpay wordmark
+      ctx.fillStyle = '#0a0a0a';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Flatpay', W/2 - 10, qrY + qrSize + 100);
+      ctx.beginPath();
+      ctx.arc(W/2 + 42, qrY + qrSize + 88, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#4cbe80';
+      ctx.fill();
+
+      ctx.textAlign = 'left'; // reset
+      resolve(canvas);
+    }
+
+    // Carica il logo
+    if (logoSrc) {
+      const img = new Image();
+      img.onload = () => draw(img);
+      img.onerror = () => draw(null);
+      img.src = logoSrc;
+    } else {
+      draw(null);
+    }
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function showImageOverlay(dataURL) {
   const old = document.getElementById('img-overlay');
   if (old) old.remove();
 
@@ -446,14 +588,15 @@ function showImageOverlay(dataURL, nome) {
   overlay.innerHTML = `
     <div style="width:100%;max-width:340px;text-align:center;">
       <img src="${dataURL}" alt="QR Flatpay"
-        style="width:100%;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.6);">
-      <p style="color:rgba(255,255,255,.55);font-size:13px;margin:20px 0 8px;line-height:1.6;">
+        style="width:100%;border-radius:16px;display:block;">
+      <p style="color:rgba(255,255,255,.5);font-size:13px;margin:20px 0 8px;line-height:1.7;">
         📱 <strong style="color:white;">Tieni premuto</strong> sull'immagine<br>
         per salvarla nella galleria foto
       </p>
       <button onclick="document.getElementById('img-overlay').remove()"
-        style="margin-top:16px;background:rgba(255,255,255,.1);color:white;border:1px solid rgba(255,255,255,.2);
-        border-radius:999px;padding:10px 28px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;">
+        style="margin-top:12px;background:rgba(255,255,255,.1);color:white;
+        border:1px solid rgba(255,255,255,.2);border-radius:999px;
+        padding:10px 28px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;">
         ← Chiudi
       </button>
     </div>
