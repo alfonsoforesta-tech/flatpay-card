@@ -402,16 +402,16 @@ function deleteCard(id) {
   renderLibrary(); showToast('QR eliminato');
 }
 
-// ── DOWNLOAD: apre l'immagine in nuova scheda (compatibile iOS/Android) ─
+// ── DOWNLOAD: cattura schermata e mostra immagine inline ─
 function downloadScreenshot(cardId) {
   const card = loadCards().find(c => c.id === cardId);
   if (!card) return;
 
   currentCard = card;
   renderPresent(card);
-
   showToast('⏳ Generazione immagine...');
 
+  // Aspetta che il QR sia renderizzato, poi cattura
   setTimeout(() => {
     const zone = document.getElementById('capture-zone');
     html2canvas(zone, {
@@ -421,32 +421,45 @@ function downloadScreenshot(cardId) {
       allowTaint: true,
       logging: false
     }).then(canvas => {
-      // Apre l'immagine in una nuova scheda — su mobile è l'unico metodo affidabile.
-      // L'utente la salva tenendo premuto sull'immagine (iOS) o con il menu (Android).
-      const imgWin = window.open('', '_blank');
-      if (!imgWin) { showToast('⚠️ Abilita i popup per salvare'); return; }
-      imgWin.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>Flatpay QR — ${card.nome||'card'}</title>
-          <style>
-            body{margin:0;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;}
-            img{max-width:100%;border-radius:12px;}
-            p{color:rgba(255,255,255,.5);font-size:13px;margin-top:20px;text-align:center;line-height:1.6;padding:0 24px;}
-          </style>
-        </head>
-        <body>
-          <img src="${canvas.toDataURL('image/png')}" alt="QR Flatpay">
-          <p>Tieni premuto sull'immagine per salvarla nella galleria</p>
-        </body>
-        </html>`);
-      imgWin.document.close();
-      showToast('✓ Tieni premuto per salvare');
+      // Mostra l'immagine in un overlay dentro la stessa pagina
+      // Evita completamente window.open e link.click — funziona ovunque
+      const dataURL = canvas.toDataURL('image/png');
+      showImageOverlay(dataURL, card.nome || 'flatpay');
     }).catch(() => showToast('Errore nella generazione'));
-  }, 400);
+  }, 500);
+}
+
+function showImageOverlay(dataURL, nome) {
+  // Rimuovi overlay precedente se esiste
+  const old = document.getElementById('img-overlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'img-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:1000;
+    background:#0a0a0a;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    padding:24px;
+  `;
+  overlay.innerHTML = `
+    <div style="width:100%;max-width:340px;text-align:center;">
+      <img src="${dataURL}" alt="QR Flatpay"
+        style="width:100%;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.6);">
+      <p style="color:rgba(255,255,255,.55);font-size:13px;margin:20px 0 8px;line-height:1.6;">
+        📱 <strong style="color:white;">Tieni premuto</strong> sull'immagine<br>
+        per salvarla nella galleria foto
+      </p>
+      <button onclick="document.getElementById('img-overlay').remove()"
+        style="margin-top:16px;background:rgba(255,255,255,.1);color:white;border:1px solid rgba(255,255,255,.2);
+        border-radius:999px;padding:10px 28px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;">
+        ← Chiudi
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  showToast('✓ Tieni premuto per salvare');
 }
 
 // ── MOSTRA ────────────────────────────────────────────────
